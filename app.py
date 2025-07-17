@@ -1,100 +1,64 @@
 import streamlit as st
 import pickle
-import pandas as pd
 import numpy as np
 from datetime import datetime
 
-# Load model
-model = pickle.load(open("flight_rf.pkl", "rb"))
+# Load the trained model
+with open("flight_rf/flight_rf.pkl", "rb") as f:
 
-st.title("Flight Fare Prediction App")
+    model = pickle.load(f)
 
-# Input fields
-st.subheader("Enter Flight Details")
+st.title("✈️ Flight Fare Prediction App")
 
-# Date of Journey
-date_dep = st.datetime_input("Departure Time", value=datetime.now())
-date_arr = st.datetime_input("Arrival Time", value=datetime.now())
+# Input form
+st.header("Enter flight details")
 
-# Total Stops
-Total_stops = st.selectbox("Total Stops", [0, 1, 2, 3, 4])
+airline = st.selectbox("Airline", [
+    'Jet Airways', 'IndiGo', 'Air India', 'Multiple carriers',
+    'SpiceJet', 'Vistara', 'GoAir', 'Multiple carriers Premium economy',
+    'Jet Airways Business', 'Vistara Premium economy', 'Trujet'
+])
 
-# Airline
-airlines = ['Jet Airways','IndiGo','Air India','Multiple carriers','SpiceJet','Vistara',
-            'GoAir','Multiple carriers Premium economy','Jet Airways Business',
-            'Vistara Premium economy','Trujet']
-airline = st.selectbox("Airline", airlines)
+source = st.selectbox("Source", ['Delhi', 'Kolkata', 'Mumbai', 'Chennai', 'Banglore'])
 
-# Source
-sources = ['Delhi', 'Kolkata', 'Mumbai', 'Chennai']
-Source = st.selectbox("Source", sources)
+destination = st.selectbox("Destination", ['Cochin', 'Delhi', 'New Delhi', 'Hyderabad', 'Kolkata', 'Banglore'])
 
-# Destination
-destinations = ['Cochin','Delhi','New_Delhi','Hyderabad','Kolkata']
-Destination = st.selectbox("Destination", destinations)
+dep_time = st.time_input("Departure Time", value=datetime.now().time())
+arr_time = st.time_input("Arrival Time", value=datetime.now().time())
 
-# Compute duration
-dur_hour = abs(date_arr.hour - date_dep.hour)
-dur_min = abs(date_arr.minute - date_dep.minute)
+stops = st.selectbox("Total Stops", ['non-stop', '1 stop', '2 stops', '3 stops', '4 stops'])
 
-# Journey details
-Journey_day = date_dep.day
-Journey_month = date_dep.month
-Dep_hour = date_dep.hour
-Dep_min = date_dep.minute
-Arrival_hour = date_arr.hour
-Arrival_min = date_arr.minute
+# Preprocessing
+def preprocess(dep, arr, stops, airline, source, destination):
+    dep_hour = dep.hour
+    dep_min = dep.minute
+    arr_hour = arr.hour
+    arr_min = arr.minute
+    dur_hour = abs(arr_hour - dep_hour)
+    dur_min = abs(arr_min - dep_min)
 
-# Airline one-hot encoding
-airline_dict = {name: 0 for name in airlines}
-airline_dict[airline] = 1
+    stop_dict = {'non-stop': 0, '1 stop': 1, '2 stops': 2, '3 stops': 3, '4 stops': 4}
+    stops_val = stop_dict[stops]
 
-# Source one-hot encoding
-s_Delhi = int(Source == 'Delhi')
-s_Kolkata = int(Source == 'Kolkata')
-s_Mumbai = int(Source == 'Mumbai')
-s_Chennai = int(Source == 'Chennai')
+    # One-hot encoding manually
+    airline_list = ['Air India', 'GoAir', 'IndiGo', 'Jet Airways', 'Jet Airways Business',
+                    'Multiple carriers', 'Multiple carriers Premium economy',
+                    'SpiceJet', 'Trujet', 'Vistara', 'Vistara Premium economy']
+    airline_encoded = [1 if airline == name else 0 for name in airline_list]
 
-# Destination one-hot encoding
-d_Cochin = int(Destination == 'Cochin')
-d_Delhi = int(Destination == 'Delhi')
-d_New_Delhi = int(Destination == 'New_Delhi')
-d_Hyderabad = int(Destination == 'Hyderabad')
-d_Kolkata = int(Destination == 'Kolkata')
+    source_list = ['Chennai', 'Delhi', 'Kolkata', 'Mumbai']
+    source_encoded = [1 if source == name else 0 for name in source_list]
 
+    dest_list = ['Cochin', 'Delhi', 'Hyderabad', 'Kolkata', 'New Delhi']
+    destination_encoded = [1 if destination == name else 0 for name in dest_list]
+
+    features = [dep_hour, dep_min, arr_hour, arr_min, dur_hour, dur_min, stops_val] + \
+               airline_encoded + source_encoded + destination_encoded
+
+    return np.array(features).reshape(1, -1)
+
+# Predict
 if st.button("Predict Fare"):
-    final_input = [
-        Total_stops,
-        Journey_day,
-        Journey_month,
-        Dep_hour,
-        Dep_min,
-        Arrival_hour,
-        Arrival_min,
-        dur_hour,
-        dur_min,
-        airline_dict['Air India'],
-        airline_dict['GoAir'],
-        airline_dict['IndiGo'],
-        airline_dict['Jet Airways'],
-        airline_dict['Jet Airways Business'],
-        airline_dict['Multiple carriers'],
-        airline_dict['Multiple carriers Premium economy'],
-        airline_dict['SpiceJet'],
-        airline_dict['Trujet'],
-        airline_dict['Vistara'],
-        airline_dict['Vistara Premium economy'],
-        s_Chennai,
-        s_Delhi,
-        s_Kolkata,
-        s_Mumbai,
-        d_Cochin,
-        d_Delhi,
-        d_Hyderabad,
-        d_Kolkata,
-        d_New_Delhi
-    ]
-
-    prediction = model.predict([final_input])
-    output = round(prediction[0], 2)
-    st.success(f"Predicted Flight Price: ₹{output}")
+    features = preprocess(dep_time, arr_time, stops, airline, source, destination)
+    fare = model.predict(features)[0]
+    st.success(f"Predicted Fare: ₹{int(fare):,}")
